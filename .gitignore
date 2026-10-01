@@ -1,0 +1,6 @@
+Debug
+*.launch
+
+.vscode
+build*
+*.pdf
