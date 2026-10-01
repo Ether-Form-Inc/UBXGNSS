@@ -142,6 +142,42 @@ With a stock OpenOCD use `-f interface/stlink.cfg -f target/stm32g0x.cfg`. Progr
 pages does not touch the settings pages. In testing, STM32CubeProgrammer repeatedly crashed an
 ST-LINK V3 while an application was running, and OpenOCD was reliable.
 
+### Programming and checking boards with `tools/flash_and_check.py`
+
+For one board at a time, this script programs the firmware over SWD with OpenOCD, resets the board and
+checks that it works. It needs Python 3 and OpenOCD (set `OPENOCD` and `OPENOCD_SCRIPTS` if they are not
+on the PATH). The CAN check also needs `pyserial` and a USB-CAN adapter, as in the next section.
+
+```bash
+tools/flash_and_check.py                       # program the newest build, then check it over CAN
+tools/flash_and_check.py --elf path/to/can_gps_firmware.elf
+tools/flash_and_check.py --check-only          # do not program: just read and check the board
+tools/flash_and_check.py --can-device none     # program only, no CAN check
+tools/flash_and_check.py --set-node-id 42      # also store node ID 42 (1 to 127)
+tools/flash_and_check.py --clear-node-id       # also remove a stored ID, so the jumpers decide again
+```
+
+What it does, in order:
+
+1. Reads the board's stored node ID, stored update rate and the chip's unique ID.
+2. Programs and verifies the firmware. The settings pages are not touched, so a stored node ID survives a
+   firmware update. Use `--set-node-id` or `--clear-node-id` to change it.
+3. Resets the board and works out which node ID it should be using: the stored ID if there is one,
+   otherwise 16 plus the jumpers.
+4. Asks that node for `GetNodeInfo` over CAN and checks that the reply is valid and the health is OK.
+5. Prints **PASS** or **FAIL** and exits with 0 only for PASS.
+
+Notes:
+
+- Other options are `--probe-serial` to choose one of several ST-LINKs, `--interface` and `--stock` for a
+  stock OpenOCD (the copy that ships with STM32CubeIDE needs the defaults), and `--boot-wait` to allow a slow
+  start.
+- A board that is not connected to the CAN bus fails the check even though it was programmed correctly:
+  nothing acknowledges its frames, so it cannot answer. Check the CAN wiring (J3 pins 5 and 6 and ground) and
+  the termination. Use `--can-device none` to skip the check when the board is not on a bus yet.
+- A new board has no stored node ID and starts as node 16 with no jumpers fitted. Two boards on one bus
+  need different IDs, so set the ID with `--set-node-id`, the jumpers or `tools/can_param.py`.
+
 ## Watching the CAN traffic
 
 `tools/can_monitor.py` decodes `Fix2` and `Auxiliary` from a serial USB-CAN adapter (the 2 Mbaud
@@ -218,7 +254,7 @@ clash with the flight controller's own.
   NMEA parser (`Nmea_parser.h`) and message builders.
 - `stm_generated/` CubeMX project: startup code, clock and pin setup, `main.cpp`.
 - `cmake/` dependency fetching and message code generation.
-- `tools/` host-side CAN tools.
+- `tools/` host-side tools: flashing and checking a board, and CAN monitoring and configuration.
 - `tests/` unit tests that run on the PC.
 - `LICENSE`, `THIRD_PARTY_LICENSES.md` the project licence and the third-party notices.
 
